@@ -18,15 +18,7 @@ export async function POST(req: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
 
-    // Configure pdfjs-dist for serverless platforms (Vercel)
-    try {
-      const pdfjsLib: any = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = undefined;
-    } catch (e) {
-      console.warn("No se pudo configurar pdfjs-dist:", e);
-    }
-
-    // Polyfill DOMMatrix on serverless platforms (Vercel) where it's missing
+    // Polyfill DOMMatrix first (some pdfjs builds expect it at import time)
     if (typeof globalThis.DOMMatrix === "undefined") {
       try {
         const dommatrix: any = await import("@thednp/dommatrix");
@@ -35,6 +27,25 @@ export async function POST(req: Request) {
       } catch (e) {
         console.warn("No se pudo cargar el polyfill 'dommatrix':", e);
       }
+    }
+
+    // Configure pdfjs-dist for serverless platforms (Vercel) to avoid worker import
+    try {
+      const pdfjsLib: any = await import("pdfjs-dist");
+      // Try multiple ways to disable worker initialization and prevent dynamic import of pdf.worker.mjs
+      try {
+        pdfjsLib.GlobalWorkerOptions = pdfjsLib.GlobalWorkerOptions ?? {};
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+      } catch {}
+      try {
+        pdfjsLib.disableWorker = true;
+      } catch {}
+      try {
+        // Some versions check this flag
+        (globalThis as any).PDFJS_DISABLE_WORKER = true;
+      } catch {}
+    } catch (e) {
+      console.warn("No se pudo configurar pdfjs-dist:", e);
     }
 
     const pdfModule: any = await import("pdf-parse");
