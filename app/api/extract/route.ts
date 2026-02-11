@@ -17,16 +17,25 @@ export async function POST(req: Request) {
 
     const arrayBuffer = await file.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
-      // Polyfill DOMMatrix on serverless platforms (Vercel) where it's missing
-      if (typeof globalThis.DOMMatrix === "undefined") {
-        try {
-          const dommatrix: any = await import("@thednp/dommatrix");
-          // dommatrix may export the constructor as default or named
-          globalThis.DOMMatrix = dommatrix.DOMMatrix ?? dommatrix.default ?? dommatrix;
-        } catch (e) {
-          console.warn("No se pudo cargar el polyfill 'dommatrix':", e);
-        }
+
+    // Configure pdfjs-dist for serverless platforms (Vercel)
+    try {
+      const pdfjsLib: any = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = undefined;
+    } catch (e) {
+      console.warn("No se pudo configurar pdfjs-dist:", e);
+    }
+
+    // Polyfill DOMMatrix on serverless platforms (Vercel) where it's missing
+    if (typeof globalThis.DOMMatrix === "undefined") {
+      try {
+        const dommatrix: any = await import("@thednp/dommatrix");
+        // dommatrix may export the constructor as default or named
+        globalThis.DOMMatrix = dommatrix.DOMMatrix ?? dommatrix.default ?? dommatrix;
+      } catch (e) {
+        console.warn("No se pudo cargar el polyfill 'dommatrix':", e);
       }
+    }
 
     const pdfModule: any = await import("pdf-parse");
     // Detect possible export shapes: function, default function, or { PDFParse: constructor }
