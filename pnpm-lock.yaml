@@ -92,6 +92,9 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: 1.1.6
         version: 1.1.6(@types/react-dom@19.2.3(@types/react@19.2.13))(@types/react@19.2.13)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@thednp/dommatrix':
+        specifier: ^3.0.2
+        version: 3.0.2
       ai:
         specifier: ^6.0.77
         version: 6.0.77(zod@3.25.76)
@@ -1413,6 +1416,10 @@ packages:
 
   '@tailwindcss/postcss@4.1.18':
     resolution: {integrity: sha512-Ce0GFnzAOuPyfV5SxjXGn0CubwGcuDB0zcdaPuCSzAa/2vII24JTkH+I6jcbXLb1ctjZMZZI6OjDaLPJQL1S0g==}
+
+  '@thednp/dommatrix@3.0.2':
+    resolution: {integrity: sha512-OO4TkIFA1SGuJoiVLgxwEZhGuDBeUxiYYLxnLwBjrL1ktnPHLPtqpjbFDAM0HkruI4/vGvhX7DLxxKDuraEz4A==}
+    engines: {node: '>=20', pnpm: '>=8.6.0'}
 
   '@types/d3-array@3.2.2':
     resolution: {integrity: sha512-hOLWVbm7uRza0BYXpIIW5pxfrKe0W+D5lrFiAEYR+pb6w3N2SwSMaJbXdUfSEv+dT4MfHBLtn5js0LAWaO6otw==}
@@ -3424,6 +3431,8 @@ snapshots:
       '@tailwindcss/oxide': 4.1.18
       postcss: 8.5.6
       tailwindcss: 4.1.18
+
+  '@thednp/dommatrix@3.0.2': {}
 
   '@types/d3-array@3.2.2': {}
 
