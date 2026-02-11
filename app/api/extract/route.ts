@@ -1,6 +1,6 @@
 import { generateText } from "ai";
-// @ts-expect-error - pdf-parse has no types
-import pdf from "pdf-parse";
+
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
@@ -15,9 +15,39 @@ export async function POST(req: Request) {
       return Response.json({ error: "El archivo debe ser un PDF" }, { status: 400 });
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const data = await pdf(buffer);
-    const extractedText = data.text?.trim() || "";
+    const arrayBuffer = await file.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+
+    const pdfModule: any = await import("pdf-parse");
+    // Detect possible export shapes: function, default function, or { PDFParse: constructor }
+    let data: any;
+    const maybeFunc = typeof pdfModule === "function" ? pdfModule : (pdfModule.default ?? pdfModule);
+
+    if (typeof maybeFunc === "function") {
+      data = await maybeFunc(uint8Array);
+    } else if (maybeFunc && typeof maybeFunc.PDFParse === "function") {
+      const PDFParseCtor = maybeFunc.PDFParse;
+      let parser: any;
+      try {
+        parser = new PDFParseCtor(uint8Array);
+      } catch (e) {
+        parser = new PDFParseCtor({ data: uint8Array });
+      }
+      if (typeof parser.getText === "function") {
+        data = await parser.getText();
+      } else if (parser.text) {
+        data = parser;
+      } else {
+        console.error("PDFParse instance has unexpected shape:", parser);
+        return Response.json({ error: "No se pudo procesar el PDF con 'PDFParse'." }, { status: 500 });
+      }
+    } else {
+      console.error("pdf-parse export shape:", pdfModule);
+      return Response.json({ error: "La dependencia 'pdf-parse' no exporta una función o constructor esperado." }, { status: 500 });
+    }
+
+    // `data` is already computed above for both shapes (function or constructor)
+    const extractedText = data && typeof data.text === "string" ? data.text.trim() : "";
 
     if (!extractedText) {
       return Response.json(
