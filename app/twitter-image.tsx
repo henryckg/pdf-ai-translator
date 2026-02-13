@@ -24,7 +24,7 @@ export default function TwitterImage() {
           borderRadius: 32,
         }}
       >
-        <div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           <span style={{ fontSize: 20, color: "#cbd5f5" }}>AI PDF Translator</span>
           <h1 style={{ fontSize: 52, margin: "12px 0", fontWeight: 700 }}>
             Traduce tus PDFs con inteligencia artificial
@@ -49,9 +49,10 @@ export default function TwitterImage() {
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 24, fontWeight: 600 }}>aipdftranslator.app</div>
+          <div style={{ display: "flex", fontSize: 24, fontWeight: 600 }}>aipdftranslator.app</div>
           <div
             style={{
+              display: "flex",
               padding: "12px 24px",
               borderRadius: 999,
               background: "#f8fafc",
