@@ -8,9 +8,36 @@ import './globals.css'
 const _inter = Inter({ subsets: ['latin'] })
 const _spaceMono = Space_Mono({ weight: ['400', '700'], subsets: ['latin'] })
 
+const baseTitle = 'PDF Translator - Traduce documentos PDF al instante'
+const baseDescription = 'Arrastra tu PDF, selecciona el idioma de destino y descarga tu documento traducido con inteligencia artificial.'
+
 export const metadata: Metadata = {
-  title: 'PDF Translator - Traduce documentos PDF al instante',
-  description: 'Arrastra tu PDF, selecciona el idioma de destino y descarga tu documento traducido con inteligencia artificial.',
+  metadataBase: new URL('https://pdf-ai-translator.vercel.app'),
+  title: baseTitle,
+  description: baseDescription,
+  keywords: [
+    'PDF',
+    'traductor',
+    'inteligencia artificial',
+    'documentos',
+    'traducción instantánea',
+  ],
+  openGraph: {
+    title: baseTitle,
+    description: baseDescription,
+    url: 'https://pdf-ai-translator.vercel.app',
+    siteName: 'PDF Translator',
+    locale: 'es_ES',
+    type: 'website',
+    images: [
+      {
+        url: '/opengraph-image',
+        width: 1200,
+        height: 630,
+        alt: 'PDF Translator - Traduce documentos PDF al instante',
+      },
+    ],
+  },
 }
 
 export const viewport: Viewport = {
