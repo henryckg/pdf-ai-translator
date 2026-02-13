@@ -59,9 +59,20 @@ export default function Page() {
 
       {/* Footer */}
       <footer className="border-t py-6">
-        <p className="text-center text-sm text-muted-foreground">
-          PDF Translator — Traducciones potenciadas por inteligencia artificial
-        </p>
+        <div className="flex flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground sm:flex-row sm:gap-1">
+          <span>PDF Translator — Traducciones potenciadas por IA.</span>
+          <span className="flex items-center gap-1">
+            Hecho con 💙 por
+            <a
+              href="https://henryck.dev"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-white transition-colors"
+            >
+              Henryck
+            </a>
+          </span>
+        </div>
       </footer>
     </div>
   );
