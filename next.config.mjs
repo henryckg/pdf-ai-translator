@@ -6,7 +6,10 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  serverExternalPackages: ["pdf-parse", "canvas"],
+  serverExternalPackages: ["pdf-parse"],
+  experimental: {
+    serverComponentsExternalPackages: ["pdf-parse"],
+  },
 }
 
 export default nextConfig
