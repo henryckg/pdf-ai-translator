@@ -6,7 +6,13 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  serverExternalPackages: ["pdf-parse"],
+  serverExternalPackages: ["canvas", "pdfjs-dist"],
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.resolve.alias.canvas = false;
+    }
+    return config;
+  },
 }
 
 export default nextConfig

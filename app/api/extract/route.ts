@@ -1,6 +1,10 @@
 import { generateText } from "ai";
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 export async function POST(req: Request) {
   try {
@@ -18,66 +22,26 @@ export async function POST(req: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
 
-    // Polyfill DOMMatrix first (some pdfjs builds expect it at import time)
-    if (typeof globalThis.DOMMatrix === "undefined") {
-      try {
-        const dommatrix: any = await import("@thednp/dommatrix");
-        // dommatrix may export the constructor as default or named
-        globalThis.DOMMatrix = dommatrix.DOMMatrix ?? dommatrix.default ?? dommatrix;
-      } catch (e) {
-        console.warn("No se pudo cargar el polyfill 'dommatrix':", e);
-      }
+    const loadingTask = pdfjsLib.getDocument({
+      data: uint8Array,
+      useSystemFonts: true,
+      standardFontDataUrl: `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/standard_fonts/`,
+    });
+
+    const pdfDocument = await loadingTask.promise;
+    const numPages = pdfDocument.numPages;
+    let extractedText = "";
+
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      const page = await pdfDocument.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(" ");
+      extractedText += pageText + "\n";
     }
 
-    // Configure pdfjs-dist for serverless platforms (Vercel) to avoid worker import
-    try {
-      const pdfjsLib: any = await import("pdfjs-dist");
-      // Try multiple ways to disable worker initialization and prevent dynamic import of pdf.worker.mjs
-      try {
-        pdfjsLib.GlobalWorkerOptions = pdfjsLib.GlobalWorkerOptions ?? {};
-        pdfjsLib.GlobalWorkerOptions.workerSrc = "";
-      } catch {}
-      try {
-        pdfjsLib.disableWorker = true;
-      } catch {}
-      try {
-        // Some versions check this flag
-        (globalThis as any).PDFJS_DISABLE_WORKER = true;
-      } catch {}
-    } catch (e) {
-      console.warn("No se pudo configurar pdfjs-dist:", e);
-    }
-
-    const pdfModule: any = await import("pdf-parse");
-    // Detect possible export shapes: function, default function, or { PDFParse: constructor }
-    let data: any;
-    const maybeFunc = typeof pdfModule === "function" ? pdfModule : (pdfModule.default ?? pdfModule);
-
-    if (typeof maybeFunc === "function") {
-      data = await maybeFunc(uint8Array);
-    } else if (maybeFunc && typeof maybeFunc.PDFParse === "function") {
-      const PDFParseCtor = maybeFunc.PDFParse;
-      let parser: any;
-      try {
-        parser = new PDFParseCtor(uint8Array);
-      } catch (e) {
-        parser = new PDFParseCtor({ data: uint8Array });
-      }
-      if (typeof parser.getText === "function") {
-        data = await parser.getText();
-      } else if (parser.text) {
-        data = parser;
-      } else {
-        console.error("PDFParse instance has unexpected shape:", parser);
-        return Response.json({ error: "No se pudo procesar el PDF con 'PDFParse'." }, { status: 500 });
-      }
-    } else {
-      console.error("pdf-parse export shape:", pdfModule);
-      return Response.json({ error: "La dependencia 'pdf-parse' no exporta una función o constructor esperado." }, { status: 500 });
-    }
-
-    // `data` is already computed above for both shapes (function or constructor)
-    const extractedText = data && typeof data.text === "string" ? data.text.trim() : "";
+    extractedText = extractedText.trim();
 
     if (!extractedText) {
       return Response.json(
@@ -86,7 +50,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Use AI to detect the language of the text
     const sampleText = extractedText.substring(0, 1500);
 
     const { text: detectedLanguage } = await generateText({
@@ -97,7 +60,7 @@ export async function POST(req: Request) {
     return Response.json({
       text: extractedText,
       detectedLanguage: detectedLanguage.trim(),
-      pageCount: data.numpages || 1,
+      pageCount: numPages,
       charCount: extractedText.length,
     });
   } catch (error) {
