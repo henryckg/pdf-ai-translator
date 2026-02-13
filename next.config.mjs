@@ -6,7 +6,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  serverExternalPackages: ["canvas", "pdfjs-dist"],
+  serverExternalPackages: ["canvas", "pdfjs-dist", "@napi-rs/canvas", "@thednp/dommatrix"],
 }
 
 export default nextConfig

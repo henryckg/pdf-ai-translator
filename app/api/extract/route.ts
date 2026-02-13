@@ -1,10 +1,18 @@
 import { generateText } from "ai";
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+async function setupPolyfills() {
+  if (typeof globalThis.DOMMatrix === "undefined") {
+    try {
+      const dommatrixModule = await import("@thednp/dommatrix");
+      globalThis.DOMMatrix = (dommatrixModule as any).DOMMatrix || (dommatrixModule as any).default || dommatrixModule;
+    } catch (e) {
+      console.warn("Could not load DOMMatrix polyfill:", e);
+    }
+  }
+}
 
 export async function POST(req: Request) {
   try {
@@ -22,9 +30,17 @@ export async function POST(req: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
 
+    await setupPolyfills();
+
+    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+
     const loadingTask = pdfjsLib.getDocument({
       data: uint8Array,
       useSystemFonts: true,
+      useWorkerFetch: false,
+      isEvalSupported: false,
       standardFontDataUrl: `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/standard_fonts/`,
     });
 
