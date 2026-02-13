@@ -39,7 +39,7 @@ export default function OpengraphImage() {
           >
             PDF
           </div>
-          <div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             <p style={{ fontSize: 18, color: "#cbd5f5", margin: 0 }}>AI PDF Translator</p>
             <h1 style={{ fontSize: 54, margin: 0, fontWeight: 700 }}>Traduce documentos al instante</h1>
           </div>
@@ -52,10 +52,10 @@ export default function OpengraphImage() {
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-          <div style={{ fontSize: 26, color: "#94a3b8" }}>
+          <div style={{ display: "flex", fontSize: 26, color: "#94a3b8" }}>
             Traducciones precisas con IA • Compatible con múltiples idiomas
           </div>
-          <div style={{ fontSize: 24, fontWeight: 600 }}>aipdftranslator.app</div>
+          <div style={{ display: "flex", fontSize: 24, fontWeight: 600 }}>aipdftranslator.app</div>
         </div>
       </div>
     ),
