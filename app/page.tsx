@@ -14,7 +14,7 @@ export default function Page() {
               <FileText className="h-5 w-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-foreground">PDF Translator</h1>
+              <h1 className="text-lg font-bold text-foreground">AI PDF Translator</h1>
               <p className="text-xs text-muted-foreground">Traduce documentos con IA</p>
             </div>
           </div>

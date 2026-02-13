@@ -9,8 +9,8 @@ const _inter = Inter({ subsets: ['latin'] })
 const _spaceMono = Space_Mono({ weight: ['400', '700'], subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'PDF Translator - Traduce documentos PDF al instante',
-  description: 'Arrastra tu PDF, selecciona el idioma de destino y descarga tu documento traducido con inteligencia artificial.',
+  title: 'AI PDF Translator - Traduce documentos PDF al instante',
+  description: 'Arrastra tu PDF, selecciona el idioma y descarga tu documento traducido con IA.',
 }
 
 export const viewport: Viewport = {
