@@ -3,17 +3,6 @@ import { generateText } from "ai";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-async function setupPolyfills() {
-  if (typeof globalThis.DOMMatrix === "undefined") {
-    try {
-      const dommatrixModule = await import("@thednp/dommatrix");
-      globalThis.DOMMatrix = (dommatrixModule as any).DOMMatrix || (dommatrixModule as any).default || dommatrixModule;
-    } catch (e) {
-      console.warn("Could not load DOMMatrix polyfill:", e);
-    }
-  }
-}
-
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
@@ -28,36 +17,17 @@ export async function POST(req: Request) {
     }
 
     const arrayBuffer = await file.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
+    const buffer = Buffer.from(arrayBuffer);
 
-    await setupPolyfills();
+    const { PDFParse } = await import("pdf-parse");
+    const parser = new PDFParse({ data: buffer });
+    const result = await parser.getText();
+    const extractedText = result.text.trim();
 
-    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    
-    pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+    const info = await parser.getInfo();
+    const pageCount = (info as any).numPages || (info as any)._pdfInfo?.numPages || 1;
 
-    const loadingTask = pdfjsLib.getDocument({
-      data: uint8Array,
-      useSystemFonts: true,
-      useWorkerFetch: false,
-      isEvalSupported: false,
-      standardFontDataUrl: `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/standard_fonts/`,
-    });
-
-    const pdfDocument = await loadingTask.promise;
-    const numPages = pdfDocument.numPages;
-    let extractedText = "";
-
-    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-      const page = await pdfDocument.getPage(pageNum);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item: any) => item.str)
-        .join(" ");
-      extractedText += pageText + "\n";
-    }
-
-    extractedText = extractedText.trim();
+    await parser.destroy();
 
     if (!extractedText) {
       return Response.json(
@@ -76,7 +46,7 @@ export async function POST(req: Request) {
     return Response.json({
       text: extractedText,
       detectedLanguage: detectedLanguage.trim(),
-      pageCount: numPages,
+      pageCount: pageCount,
       charCount: extractedText.length,
     });
   } catch (error) {
