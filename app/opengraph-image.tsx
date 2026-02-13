@@ -55,7 +55,7 @@ export default function OpengraphImage() {
           <div style={{ display: "flex", fontSize: 26, color: "#94a3b8" }}>
             Traducciones precisas con IA • Compatible con múltiples idiomas
           </div>
-          <div style={{ display: "flex", fontSize: 24, fontWeight: 600 }}>aipdftranslator.app</div>
+          <div style={{ display: "flex", fontSize: 24, fontWeight: 600 }}>AI PDF Translator</div>
         </div>
       </div>
     ),

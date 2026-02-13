@@ -49,7 +49,7 @@ export default function TwitterImage() {
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", fontSize: 24, fontWeight: 600 }}>aipdftranslator.app</div>
+          <div style={{ display: "flex", fontSize: 24, fontWeight: 600 }}>AI PDF Translator</div>
           <div
             style={{
               display: "flex",
