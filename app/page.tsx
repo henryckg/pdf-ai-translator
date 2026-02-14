@@ -67,7 +67,7 @@ export default function Page() {
               href="https://henryck.dev"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline hover:text-white transition-colors"
+              className="underline dark:hover:text-white hover:text-black transition-colors"
             >
               Henryck
             </a>

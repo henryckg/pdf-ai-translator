@@ -25,17 +25,17 @@ export function ThemeToggle() {
 
   return (
     <Button
-      variant="ghost"
+      variant="toggle"
       size="icon"
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      className="rounded-lg"
+      className="rounded-full transition-all duration-500"
       aria-label="Cambiar tema"
     >
       {isDark ? (
-        <Sun className="h-5 w-5 text-muted-foreground hover:text-foreground transition-colors" />
+        <Sun className="h-5 w-5 text-yellow-500 transition-colors" />
       ) : (
-        <Moon className="h-5 w-5 text-muted-foreground hover:text-foreground transition-colors" />
-      )}
+        <Moon className="h-5 w-5 text-primary transition-colors" />
+      )}    
     </Button>
   )
 }
