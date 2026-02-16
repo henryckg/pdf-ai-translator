@@ -14,7 +14,7 @@ export default function Page() {
               <FileText className="h-5 w-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-foreground">AI PDF Translator</h1>
+              <h1 className="text-lg font-bold text-foreground">AI Document Translator</h1>
               <p className="text-xs text-muted-foreground">Traduce documentos con IA</p>
             </div>
           </div>
@@ -26,10 +26,10 @@ export default function Page() {
         {/* Hero */}
         <section className="mb-12 text-center">
           <h2 className="text-balance text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            Traduce cualquier PDF al instante
+            Traduce tus PDF y EPUB al instante
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-pretty text-muted-foreground leading-relaxed">
-            Arrastra tu documento, selecciona el idioma de destino y descarga tu PDF traducido.
+            Arrastra tu documento, selecciona el idioma de destino y descarga tu archivo traducido.
             Potenciado por inteligencia artificial para traducciones precisas y naturales.
           </p>
         </section>
@@ -48,7 +48,7 @@ export default function Page() {
           />
           <FeatureCard
             icon={<Download className="h-5 w-5 text-primary" />}
-            title="Descarga PDF"
+            title="Descarga final"
             description="Obtén tu documento traducido listo para usar"
           />
         </section>
@@ -60,7 +60,7 @@ export default function Page() {
       {/* Footer */}
       <footer className="border-t py-6">
         <div className="flex flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground sm:flex-row sm:gap-1">
-          <span>PDF Translator — Traducciones potenciadas por IA.</span>
+          <span>Document Translator — Traducciones potenciadas por IA.</span>
           <span className="flex items-center gap-1">
             Hecho con 💙 por
             <a

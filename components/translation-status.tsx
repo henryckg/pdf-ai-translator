@@ -13,9 +13,9 @@ interface TranslationStatusProps {
 
 const STEP_LABELS: Record<TranslationStep, string> = {
   idle: "",
-  extracting: "Extrayendo texto del PDF...",
+  extracting: "Procesando documento...",
   translating: "Traduciendo el documento...",
-  generating: "Generando PDF traducido...",
+  generating: "Generando archivo traducido...",
   done: "Traducción completada",
   error: "Ha ocurrido un error",
 };
