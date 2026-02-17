@@ -54,7 +54,10 @@ export function PdfTranslator() {
   const [detailMessage, setDetailMessage] = useState("");
   const [currentEpubJobId, setCurrentEpubJobId] = useState<string | null>(null);
   const [isCancellingEpubJob, setIsCancellingEpubJob] = useState(false);
+  const [isCancellingPdfTranslation, setIsCancellingPdfTranslation] = useState(false);
   const shouldStopEpubPollingRef = useRef(false);
+  const pdfAbortControllerRef = useRef<AbortController | null>(null);
+  const isCancellingPdfRef = useRef(false);
 
   const handleFileAccepted = useCallback(async (acceptedFile: File) => {
     setFile(acceptedFile);
@@ -67,6 +70,8 @@ export function PdfTranslator() {
     setProgress(15);
     setErrorMessage("");
     setDetailMessage("");
+    setIsCancellingPdfTranslation(false);
+    isCancellingPdfRef.current = false;
 
     try {
       const formData = new FormData();
@@ -96,6 +101,10 @@ export function PdfTranslator() {
   }, []);
 
   const handleClear = useCallback(() => {
+    pdfAbortControllerRef.current?.abort();
+    pdfAbortControllerRef.current = null;
+    isCancellingPdfRef.current = false;
+
     setFile(null);
     setExtractionResult(null);
     setTargetLanguage("");
@@ -108,6 +117,7 @@ export function PdfTranslator() {
     setDetailMessage("");
     setCurrentEpubJobId(null);
     setIsCancellingEpubJob(false);
+    setIsCancellingPdfTranslation(false);
     shouldStopEpubPollingRef.current = false;
   }, []);
 
@@ -135,6 +145,14 @@ export function PdfTranslator() {
       setDetailMessage("");
     }
   }, [currentEpubJobId, isCancellingEpubJob]);
+
+  const handleCancelPdfTranslation = useCallback(() => {
+    if (!pdfAbortControllerRef.current || isCancellingPdfTranslation) return;
+
+    isCancellingPdfRef.current = true;
+    setIsCancellingPdfTranslation(true);
+    pdfAbortControllerRef.current.abort();
+  }, [isCancellingPdfTranslation]);
 
   const handleTranslate = useCallback(async () => {
     if (!extractionResult || !targetLanguage || !file) return;
@@ -254,9 +272,13 @@ export function PdfTranslator() {
         setDetailMessage("");
         setCurrentEpubJobId(null);
       } else {
+        const abortController = new AbortController();
+        pdfAbortControllerRef.current = abortController;
+
         const response = await fetch("/api/translate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: abortController.signal,
           body: JSON.stringify({
             text: extractionResult.text,
             sourceLanguage: extractionResult.detectedLanguage,
@@ -289,6 +311,8 @@ export function PdfTranslator() {
           );
           setProgress(estimatedProgress);
         }
+
+        pdfAbortControllerRef.current = null;
       }
 
       setProgress(100);
@@ -296,12 +320,23 @@ export function PdfTranslator() {
       setDetailMessage("");
       setCurrentEpubJobId(null);
       setIsCancellingEpubJob(false);
+      setIsCancellingPdfTranslation(false);
+      pdfAbortControllerRef.current = null;
+      isCancellingPdfRef.current = false;
       shouldStopEpubPollingRef.current = false;
     } catch (err) {
-      setStep("error");
+      const canceledByUser = isCancellingPdfRef.current;
+      if (canceledByUser) {
+        setStep("idle");
+      } else {
+        setStep("error");
+      }
       setDetailMessage("");
       setCurrentEpubJobId(null);
       setIsCancellingEpubJob(false);
+      setIsCancellingPdfTranslation(false);
+      pdfAbortControllerRef.current = null;
+      isCancellingPdfRef.current = false;
       shouldStopEpubPollingRef.current = false;
 
       const isAbortError =
@@ -310,6 +345,12 @@ export function PdfTranslator() {
           : err instanceof Error && /aborted|abort/i.test(err.message);
 
       if (isAbortError) {
+        if (canceledByUser) {
+          setProgress(0);
+          setErrorMessage("");
+          return;
+        }
+
         setErrorMessage(
           "La traducción tardó demasiado y fue cancelada automáticamente. Intenta con un EPUB más pequeño o divídelo en partes."
         );
@@ -376,6 +417,11 @@ export function PdfTranslator() {
 
   const canTranslate =
     extractionResult && targetLanguage && step !== "translating" && step !== "extracting";
+
+  const showCancelButton =
+    step === "translating" &&
+    ((extractionResult?.fileType === "epub" && Boolean(currentEpubJobId)) ||
+      (extractionResult?.fileType === "pdf" && Boolean(pdfAbortControllerRef.current)));
 
   return (
     <div className="flex flex-col gap-8">
@@ -466,15 +512,23 @@ export function PdfTranslator() {
         detailMessage={detailMessage}
       />
 
-      {currentEpubJobId && (step === "extracting" || step === "translating" || step === "generating") && (
+      {showCancelButton && (
         <div className="-mt-4">
           <Button
             type="button"
             variant="cancel"
-            onClick={handleCancelEpubTranslation}
-            disabled={isCancellingEpubJob}
+            onClick={
+              extractionResult?.fileType === "epub"
+                ? handleCancelEpubTranslation
+                : handleCancelPdfTranslation
+            }
+            disabled={isCancellingEpubJob || isCancellingPdfTranslation}
           >
-            {isCancellingEpubJob ? "Cancelando..." : "Cancelar traducción EPUB"}
+            {isCancellingEpubJob || isCancellingPdfTranslation
+              ? "Cancelando..."
+              : extractionResult?.fileType === "epub"
+                ? "Cancelar traducción EPUB"
+                : "Cancelar traducción PDF"}
           </Button>
         </div>
       )}
@@ -492,10 +546,15 @@ export function PdfTranslator() {
               </h2>
             </div>
             {step === "done" && (
-              <Button onClick={handleDownload} size="lg" className="gap-2">
-                <Download className="h-4 w-4" />
-                {translatedEpubBlob ? "Descargar EPUB" : "Descargar PDF"}
-              </Button>
+              <div className="hidden items-center gap-2 sm:flex">
+                <Button onClick={handleClear} variant="outline" size="lg">
+                  Traducir otro archivo
+                </Button>
+                <Button onClick={handleDownload} size="lg" className="gap-2">
+                  <Download className="h-4 w-4" />
+                  {translatedEpubBlob ? "Descargar EPUB" : "Descargar PDF"}
+                </Button>
+              </div>
             )}
           </div>
 
@@ -514,7 +573,15 @@ export function PdfTranslator() {
           )}
 
           {step === "done" && (
-            <div className="flex sm:hidden">
+            <div className="flex flex-col gap-2 sm:hidden">
+              <Button
+                onClick={handleClear}
+                variant="outline"
+                size="lg"
+                className="w-full"
+              >
+                Traducir otro archivo
+              </Button>
               <Button
                 onClick={handleDownload}
                 size="lg"
