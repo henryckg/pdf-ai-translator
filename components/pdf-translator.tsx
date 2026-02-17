@@ -470,7 +470,7 @@ export function PdfTranslator() {
         <div className="-mt-4">
           <Button
             type="button"
-            variant="outline"
+            variant="cancel"
             onClick={handleCancelEpubTranslation}
             disabled={isCancellingEpubJob}
           >
