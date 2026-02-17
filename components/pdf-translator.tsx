@@ -191,6 +191,9 @@ export function PdfTranslator() {
           });
 
           if (!statusResponse.ok) {
+            if (statusResponse.status === 404) {
+              throw new Error("El servidor se reinició y se perdió el progreso. Por favor intenta de nuevo.");
+            }
             const data = await statusResponse.json().catch(() => ({}));
             throw new Error(data.error || `No se pudo consultar el estado del trabajo (ref: ${traceId})`);
           }

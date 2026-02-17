@@ -184,6 +184,7 @@ export function startEpubJob({ file, sourceLanguage, targetLanguage }: StartEpub
           }
           touch(job);
         },
+        checkCanceled: () => job.canceled,
       });
 
       const originalName = file.name.replace(/\.epub$/i, "") || "documento";
