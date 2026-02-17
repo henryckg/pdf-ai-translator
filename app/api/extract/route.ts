@@ -1,5 +1,9 @@
 import { generateText } from "ai";
 import pdfParse from "pdf-parse";
+import {
+  EpubValidationError,
+  extractEpubTextForDetection,
+} from "@/lib/epub";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -13,19 +17,39 @@ export async function POST(req: Request) {
       return Response.json({ error: "No se proporcionó un archivo" }, { status: 400 });
     }
 
-    if (file.type !== "application/pdf") {
-      return Response.json({ error: "El archivo debe ser un PDF" }, { status: 400 });
+    const isPdf = file.type === "application/pdf";
+    const isEpub =
+      file.type === "application/epub+zip" || file.name.toLowerCase().endsWith(".epub");
+
+    if (!isPdf && !isEpub) {
+      return Response.json(
+        { error: "El archivo debe ser un PDF o EPUB" },
+        { status: 400 }
+      );
     }
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const data = await pdfParse(buffer);
-    const extractedText = data.text.trim();
+    let extractedText = "";
+    let itemCount = 0;
+    let fileType: "pdf" | "epub" = "pdf";
+
+    if (isPdf) {
+      const data = await pdfParse(buffer);
+      extractedText = data.text.trim();
+      itemCount = data.numpages;
+      fileType = "pdf";
+    } else {
+      const epubExtraction = await extractEpubTextForDetection(buffer);
+      extractedText = epubExtraction.text;
+      itemCount = epubExtraction.chapterCount;
+      fileType = "epub";
+    }
 
     if (!extractedText) {
       return Response.json(
-        { error: "No se pudo extraer texto del PDF. Asegúrate de que el PDF contiene texto legible." },
+        { error: "No se pudo extraer texto del archivo. Asegúrate de que contiene texto legible." },
         { status: 400 }
       );
     }
@@ -38,15 +62,20 @@ export async function POST(req: Request) {
     });
 
     return Response.json({
-      text: extractedText,
+      text: fileType === "pdf" ? extractedText : "",
       detectedLanguage: detectedLanguage.trim(),
-      pageCount: data.numpages,
+      pageCount: itemCount,
       charCount: extractedText.length,
+      fileType,
     });
   } catch (error) {
+    if (error instanceof EpubValidationError) {
+      return Response.json({ error: error.message }, { status: 400 });
+    }
+
     console.error("Error extracting PDF:", error);
     return Response.json(
-      { error: "Error al procesar el PDF. Inténtalo de nuevo." },
+      { error: "Error al procesar el archivo. Inténtalo de nuevo." },
       { status: 500 }
     );
   }

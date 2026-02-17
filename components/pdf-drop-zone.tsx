@@ -11,9 +11,25 @@ interface PdfDropZoneProps {
   file: File | null;
   onClear: () => void;
   disabled?: boolean;
+  acceptedFormats?: "pdf" | "pdf-epub";
 }
 
-export function PdfDropZone({ onFileAccepted, file, onClear, disabled }: PdfDropZoneProps) {
+function isSupportedFile(file: File, acceptedFormats: "pdf" | "pdf-epub"): boolean {
+  const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+  const isEpub =
+    file.type === "application/epub+zip" || file.name.toLowerCase().endsWith(".epub");
+
+  if (acceptedFormats === "pdf") return isPdf;
+  return isPdf || isEpub;
+}
+
+export function PdfDropZone({
+  onFileAccepted,
+  file,
+  onClear,
+  disabled,
+  acceptedFormats = "pdf-epub",
+}: PdfDropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -37,22 +53,22 @@ export function PdfDropZone({ onFileAccepted, file, onClear, disabled }: PdfDrop
       if (disabled) return;
 
       const droppedFile = e.dataTransfer.files[0];
-      if (droppedFile?.type === "application/pdf") {
+      if (droppedFile && isSupportedFile(droppedFile, acceptedFormats)) {
         onFileAccepted(droppedFile);
       }
     },
-    [onFileAccepted, disabled]
+    [onFileAccepted, disabled, acceptedFormats]
   );
 
   const handleFileInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const selectedFile = e.target.files?.[0];
-      if (selectedFile?.type === "application/pdf") {
+      if (selectedFile && isSupportedFile(selectedFile, acceptedFormats)) {
         onFileAccepted(selectedFile);
       }
       e.target.value = "";
     },
-    [onFileAccepted]
+    [onFileAccepted, acceptedFormats]
   );
 
   const formatFileSize = (bytes: number) => {
@@ -105,23 +121,23 @@ export function PdfDropZone({ onFileAccepted, file, onClear, disabled }: PdfDrop
     >
       <input
         type="file"
-        accept=".pdf,application/pdf"
+        accept={acceptedFormats === "pdf" ? ".pdf,application/pdf" : ".pdf,.epub,application/pdf,application/epub+zip"}
         onChange={handleFileInput}
         className="absolute inset-0 cursor-pointer opacity-0"
         disabled={disabled}
-        aria-label="Seleccionar archivo PDF"
+        aria-label={acceptedFormats === "pdf" ? "Seleccionar archivo PDF" : "Seleccionar archivo PDF o EPUB"}
       />
       <div className="flex h-16 w-16 items-center justify-center rounded-full bg-secondary">
         <Upload className="h-7 w-7 text-muted-foreground" />
       </div>
       <p className="mt-4 text-base font-medium text-foreground">
-        Arrastra tu PDF aquí
+        {acceptedFormats === "pdf" ? "Arrastra tu PDF aquí" : "Arrastra tu PDF o EPUB aquí"}
       </p>
       <p className="mt-1 text-sm text-muted-foreground">
         o haz clic para seleccionar un archivo
       </p>
       <p className="mt-3 text-xs text-muted-foreground">
-        Solo archivos PDF
+        {acceptedFormats === "pdf" ? "Solo archivos PDF" : "Archivos PDF o EPUB (máx. 10 MB para EPUB)"}
       </p>
     </div>
   );

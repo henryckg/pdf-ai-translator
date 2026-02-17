@@ -9,18 +9,24 @@ interface TranslationStatusProps {
   step: TranslationStep;
   progress: number;
   errorMessage?: string;
+  detailMessage?: string;
 }
 
 const STEP_LABELS: Record<TranslationStep, string> = {
   idle: "",
-  extracting: "Extrayendo texto del PDF...",
+  extracting: "Procesando documento...",
   translating: "Traduciendo el documento...",
-  generating: "Generando PDF traducido...",
+  generating: "Generando archivo traducido...",
   done: "Traducción completada",
   error: "Ha ocurrido un error",
 };
 
-export function TranslationStatus({ step, progress, errorMessage }: TranslationStatusProps) {
+export function TranslationStatus({
+  step,
+  progress,
+  errorMessage,
+  detailMessage,
+}: TranslationStatusProps) {
   if (step === "idle") return null;
 
   const isProcessing = step === "extracting" || step === "translating" || step === "generating";
@@ -41,6 +47,10 @@ export function TranslationStatus({ step, progress, errorMessage }: TranslationS
           {STEP_LABELS[step]}
         </span>
       </div>
+
+      {isProcessing && detailMessage && (
+        <p className="text-sm text-muted-foreground">{detailMessage}</p>
+      )}
 
       {isProcessing && (
         <Progress value={progress} className="h-2" />
