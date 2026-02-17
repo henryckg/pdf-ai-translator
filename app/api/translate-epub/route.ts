@@ -1,9 +1,8 @@
-import { EpubValidationError, translateEpubBuffer } from "@/lib/epub";
+import { EpubValidationError } from "@/lib/epub";
+import { startEpubJob } from "@/lib/epub-jobs";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
-
-const MAX_EPUB_SIZE_BYTES = 10 * 1024 * 1024;
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
   try {
@@ -19,48 +18,28 @@ export async function POST(req: Request) {
       );
     }
 
-    const isEpub =
-      file.type === "application/epub+zip" || file.name.toLowerCase().endsWith(".epub");
-
-    if (!isEpub) {
-      return Response.json({ error: "El archivo debe ser un EPUB" }, { status: 400 });
-    }
-
-    if (file.size > MAX_EPUB_SIZE_BYTES) {
-      return Response.json(
-        { error: "El EPUB supera el límite de 10 MB" },
-        { status: 400 },
-      );
-    }
-
-    const arrayBuffer = await file.arrayBuffer();
-    const inputBuffer = Buffer.from(arrayBuffer);
-
-    const translatedBuffer = await translateEpubBuffer(inputBuffer, {
-      sourceLanguage: sourceLanguage || "Auto",
+    const job = startEpubJob({
+      file,
+      sourceLanguage,
       targetLanguage,
     });
 
-    const originalName = file.name.replace(/\.epub$/i, "") || "documento";
-    const targetSuffix = targetLanguage.toLowerCase();
-    const outputName = `${originalName}.${targetSuffix}.epub`;
-
-    return new Response(new Uint8Array(translatedBuffer), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/epub+zip",
-        "Content-Disposition": `attachment; filename="${outputName}"`,
-        "Cache-Control": "no-store",
+    return Response.json(
+      {
+        jobId: job.id,
+        status: job.status,
+        traceId: job.traceId,
       },
-    });
+      { status: 202 },
+    );
   } catch (error) {
     if (error instanceof EpubValidationError) {
       return Response.json({ error: error.message }, { status: 400 });
     }
 
-    console.error("Error translating EPUB:", error);
+    console.error("Error creating EPUB job:", error);
     return Response.json(
-      { error: "Error al traducir el EPUB. Inténtalo de nuevo." },
+      { error: "No se pudo iniciar la traducción EPUB. Inténtalo de nuevo." },
       { status: 500 },
     );
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Download, Languages, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,26 @@ interface ExtractionResult {
   fileType: "pdf" | "epub";
 }
 
+interface EpubJobCreateResponse {
+  jobId: string;
+  status: "queued" | "processing" | "done" | "error";
+  traceId: string;
+}
+
+interface EpubJobStatusResponse {
+  id: string;
+  status: "queued" | "processing" | "done" | "error" | "canceled";
+  traceId: string;
+  chapter?: number;
+  totalChapters?: number;
+  progress: number;
+  error?: string;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 export function PdfTranslator() {
   const [file, setFile] = useState<File | null>(null);
   const [extractionResult, setExtractionResult] =
@@ -31,6 +51,10 @@ export function PdfTranslator() {
   const [step, setStep] = useState<TranslationStep>("idle");
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
+  const [detailMessage, setDetailMessage] = useState("");
+  const [currentEpubJobId, setCurrentEpubJobId] = useState<string | null>(null);
+  const [isCancellingEpubJob, setIsCancellingEpubJob] = useState(false);
+  const shouldStopEpubPollingRef = useRef(false);
 
   const handleFileAccepted = useCallback(async (acceptedFile: File) => {
     setFile(acceptedFile);
@@ -42,6 +66,7 @@ export function PdfTranslator() {
     setStep("extracting");
     setProgress(15);
     setErrorMessage("");
+    setDetailMessage("");
 
     try {
       const formData = new FormData();
@@ -80,7 +105,36 @@ export function PdfTranslator() {
     setStep("idle");
     setProgress(0);
     setErrorMessage("");
+    setDetailMessage("");
+    setCurrentEpubJobId(null);
+    setIsCancellingEpubJob(false);
+    shouldStopEpubPollingRef.current = false;
   }, []);
+
+  const handleCancelEpubTranslation = useCallback(async () => {
+    if (!currentEpubJobId || isCancellingEpubJob) return;
+
+    setIsCancellingEpubJob(true);
+    shouldStopEpubPollingRef.current = true;
+
+    try {
+      await fetch(`/api/translate-epub/${currentEpubJobId}`, {
+        method: "DELETE",
+        cache: "no-store",
+      });
+    } catch {
+      // Ignore network errors here; local UI is still reset.
+    } finally {
+      setCurrentEpubJobId(null);
+      setIsCancellingEpubJob(false);
+      setTranslatedEpubBlob(null);
+      setTranslatedEpubFilename("");
+      setStep("idle");
+      setProgress(0);
+      setErrorMessage("");
+      setDetailMessage("");
+    }
+  }, [currentEpubJobId, isCancellingEpubJob]);
 
   const handleTranslate = useCallback(async () => {
     if (!extractionResult || !targetLanguage || !file) return;
@@ -91,42 +145,111 @@ export function PdfTranslator() {
     setTranslatedEpubBlob(null);
     setTranslatedEpubFilename("");
     setErrorMessage("");
+    setDetailMessage("");
 
     try {
       if (extractionResult.fileType === "epub") {
-        const timer = setInterval(() => {
-          setProgress((current) => Math.min(88, current + 2));
-        }, 700);
+        setStep("extracting");
+        setProgress(12);
+        setDetailMessage("Preparando trabajo EPUB...");
 
-        try {
-          const formData = new FormData();
-          formData.append("file", file);
-          formData.append("sourceLanguage", extractionResult.detectedLanguage);
-          formData.append("targetLanguage", targetLanguage);
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("sourceLanguage", extractionResult.detectedLanguage);
+        formData.append("targetLanguage", targetLanguage);
 
-          const response = await fetch("/api/translate-epub", {
-            method: "POST",
-            body: formData,
-          });
+        const createResponse = await fetch("/api/translate-epub", {
+          method: "POST",
+          body: formData,
+        });
 
-          if (!response.ok) {
-            const data = await response.json().catch(() => ({}));
-            throw new Error(data.error || "Error al traducir el EPUB");
+        if (!createResponse.ok) {
+          const data = await createResponse.json().catch(() => ({}));
+          throw new Error(data.error || "No se pudo iniciar la traducción EPUB");
+        }
+
+        const createData = (await createResponse.json()) as EpubJobCreateResponse;
+        const { jobId, traceId } = createData;
+        shouldStopEpubPollingRef.current = false;
+        setCurrentEpubJobId(jobId);
+        setIsCancellingEpubJob(false);
+
+        setStep("translating");
+        setProgress(20);
+        setDetailMessage("Traduciendo capítulos...");
+
+        let pollAttempt = 0;
+
+        while (true) {
+          if (shouldStopEpubPollingRef.current) {
+            break;
           }
 
-          setStep("generating");
-          setProgress(92);
+          const statusResponse = await fetch(`/api/translate-epub/${jobId}`, {
+            method: "GET",
+            cache: "no-store",
+          });
 
-          const blob = await response.blob();
-          const contentDisposition = response.headers.get("Content-Disposition") ?? "";
-          const filenameMatch = contentDisposition.match(/filename=\"?([^\"]+)\"?/i);
-          const fallbackName = `${file.name.replace(/\.epub$/i, "")}.${targetLanguage.toLowerCase()}.epub`;
+          if (!statusResponse.ok) {
+            const data = await statusResponse.json().catch(() => ({}));
+            throw new Error(data.error || `No se pudo consultar el estado del trabajo (ref: ${traceId})`);
+          }
 
-          setTranslatedEpubBlob(blob);
-          setTranslatedEpubFilename(filenameMatch?.[1] || fallbackName);
-        } finally {
-          clearInterval(timer);
+          const statusData = (await statusResponse.json()) as EpubJobStatusResponse;
+          setProgress(Math.min(96, Math.max(15, statusData.progress || 0)));
+
+          if (statusData.chapter && statusData.totalChapters) {
+            setDetailMessage(
+              `Capítulo ${statusData.chapter} de ${statusData.totalChapters} (ref: ${statusData.traceId})`
+            );
+          } else {
+            setDetailMessage(`Preparando capítulos... (ref: ${statusData.traceId})`);
+          }
+
+          if (statusData.status === "error") {
+            throw new Error(statusData.error || `La traducción EPUB falló. (ref: ${statusData.traceId})`);
+          }
+
+          if (statusData.status === "canceled") {
+            throw new Error(statusData.error || `La traducción EPUB fue cancelada. (ref: ${statusData.traceId})`);
+          }
+
+          if (statusData.status === "done") {
+            break;
+          }
+
+          pollAttempt += 1;
+          const pollDelayMs = pollAttempt < 8 ? 1500 : pollAttempt < 24 ? 3000 : 5000;
+          await sleep(pollDelayMs);
         }
+
+        if (shouldStopEpubPollingRef.current) {
+          return;
+        }
+
+        setStep("generating");
+        setProgress(97);
+        setDetailMessage("Generando descarga...");
+
+        const downloadResponse = await fetch(`/api/translate-epub/${jobId}/download`, {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!downloadResponse.ok) {
+          const data = await downloadResponse.json().catch(() => ({}));
+          throw new Error(data.error || `No se pudo descargar el EPUB traducido (ref: ${traceId})`);
+        }
+
+        const blob = await downloadResponse.blob();
+        const contentDisposition = downloadResponse.headers.get("Content-Disposition") ?? "";
+        const filenameMatch = contentDisposition.match(/filename=\"?([^\"]+)\"?/i);
+        const fallbackName = `${file.name.replace(/\.epub$/i, "")}.${targetLanguage.toLowerCase()}.epub`;
+
+        setTranslatedEpubBlob(blob);
+        setTranslatedEpubFilename(filenameMatch?.[1] || fallbackName);
+        setDetailMessage("");
+        setCurrentEpubJobId(null);
       } else {
         const response = await fetch("/api/translate", {
           method: "POST",
@@ -167,8 +290,39 @@ export function PdfTranslator() {
 
       setProgress(100);
       setStep("done");
+      setDetailMessage("");
+      setCurrentEpubJobId(null);
+      setIsCancellingEpubJob(false);
+      shouldStopEpubPollingRef.current = false;
     } catch (err) {
       setStep("error");
+      setDetailMessage("");
+      setCurrentEpubJobId(null);
+      setIsCancellingEpubJob(false);
+      shouldStopEpubPollingRef.current = false;
+
+      const isAbortError =
+        err instanceof DOMException
+          ? err.name === "AbortError"
+          : err instanceof Error && /aborted|abort/i.test(err.message);
+
+      if (isAbortError) {
+        setErrorMessage(
+          "La traducción tardó demasiado y fue cancelada automáticamente. Intenta con un EPUB más pequeño o divídelo en partes."
+        );
+        return;
+      }
+
+      const isNetworkFetchError =
+        err instanceof TypeError && /failed to fetch|networkerror/i.test(err.message);
+
+      if (isNetworkFetchError) {
+        setErrorMessage(
+          "La traducción terminó, pero se perdió la conexión antes de descargar el archivo. Intenta de nuevo y revisa el log del servidor para el ref EPUB."
+        );
+        return;
+      }
+
       setErrorMessage(
         err instanceof Error ? err.message : "Error al traducir"
       );
@@ -306,7 +460,21 @@ export function PdfTranslator() {
         step={step}
         progress={progress}
         errorMessage={errorMessage}
+        detailMessage={detailMessage}
       />
+
+      {currentEpubJobId && (step === "extracting" || step === "translating" || step === "generating") && (
+        <div className="-mt-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleCancelEpubTranslation}
+            disabled={isCancellingEpubJob}
+          >
+            {isCancellingEpubJob ? "Cancelando..." : "Cancelar traducción EPUB"}
+          </Button>
+        </div>
+      )}
 
       {/* Preview */}
       {(translatedText || translatedEpubBlob) && (

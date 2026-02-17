@@ -1,11 +1,15 @@
-import { generateText } from "ai";
+import { generateObject, generateText, Output } from "ai";
 import * as cheerio from "cheerio";
 import { XMLParser } from "fast-xml-parser";
 import JSZip from "jszip";
 import path from "node:path";
+import { z } from "zod";
 
 const EPUB_MIME_TYPE = "application/epub+zip";
-const TRANSLATION_BATCH_SIZE = 20;
+const TRANSLATION_BATCH_SIZE = 120;
+const TRANSLATION_BATCH_CONCURRENCY = 4;
+const CHAPTER_TRANSLATION_CONCURRENCY = 2;
+const MAX_TRANSLATABLE_CHARS = 180_000;
 
 export class EpubValidationError extends Error {
   constructor(message: string) {
@@ -33,6 +37,21 @@ interface ExtractedEpubText {
 interface TranslateEpubOptions {
   sourceLanguage: string;
   targetLanguage: string;
+  traceId?: string;
+  onLog?: (message: string, meta?: Record<string, unknown>) => void;
+  onChapterProgress?: (progress: {
+    chapter: number;
+    totalChapters: number;
+    phase: "start" | "done";
+    path: string;
+  }) => void;
+}
+
+interface TranslateXhtmlResult {
+  translatedContent: string;
+  translatableNodeCount: number;
+  translatableChars: number;
+  batchCount: number;
 }
 
 const xmlParser = new XMLParser({
@@ -48,34 +67,30 @@ function resolveZipPath(basePath: string, relativePath: string): string {
   return normalizeZipPath(path.posix.normalize(path.posix.join(basePath, relativePath)));
 }
 
-function sanitizeJsonResponse(rawText: string): string {
-  const trimmed = rawText.trim();
-  if (trimmed.startsWith("```") && trimmed.endsWith("```")) {
-    return trimmed.replace(/^```(?:json)?\n?/i, "").replace(/```$/, "").trim();
-  }
-  return trimmed;
-}
-
 async function translateTextBatch(
   entries: string[],
   sourceLanguage: string,
   targetLanguage: string,
 ): Promise<string[]> {
   const payload = JSON.stringify(entries);
-  const { text } = await generateText({
+  const { output } = await generateText({
     model: "openai/gpt-4o-mini",
+    output: Output.object({
+      schema: z.object({
+        translations: z.array(z.string()),
+      }),
+    }),
     system: `You are a professional document translator. Translate from ${sourceLanguage} to ${targetLanguage}.
 
 Rules:
 - Keep meaning and tone natural.
 - Do not add or remove entries.
-- Return ONLY a valid JSON array of translated strings.
 - Keep array length and order identical to the input.
-- Do not include markdown, explanations, or extra keys.`,
-    prompt: `Translate this JSON array:\n${payload}`,
+- Output only the JSON object required by the schema.`,
+    prompt: `Translate this JSON array and place results in the translations field:\n${payload}`,
   });
 
-  const parsed = JSON.parse(sanitizeJsonResponse(text));
+  const parsed = output.translations;
   if (!Array.isArray(parsed) || parsed.length !== entries.length) {
     throw new Error("La traducción por lotes devolvió un formato inválido");
   }
@@ -110,12 +125,52 @@ async function translateEntriesSafely(
   try {
     return await translateTextBatch(entries, sourceLanguage, targetLanguage);
   } catch {
-    const translated: string[] = [];
-    for (const entry of entries) {
-      translated.push(await translateSingleText(entry, sourceLanguage, targetLanguage));
+    if (entries.length === 1) {
+      return [await translateSingleText(entries[0], sourceLanguage, targetLanguage)];
     }
-    return translated;
+
+    const middle = Math.ceil(entries.length / 2);
+    const left = await translateEntriesSafely(
+      entries.slice(0, middle),
+      sourceLanguage,
+      targetLanguage,
+    );
+    const right = await translateEntriesSafely(
+      entries.slice(middle),
+      sourceLanguage,
+      targetLanguage,
+    );
+
+    return [...left, ...right];
   }
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.max(1, Math.min(concurrency, items.length));
+
+  async function worker() {
+    while (true) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+
+      if (currentIndex >= items.length) {
+        return;
+      }
+
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
 }
 
 function getTrimmedTextBoundaries(original: string): {
@@ -253,7 +308,7 @@ async function translateXhtmlDocument(
   content: string,
   sourceLanguage: string,
   targetLanguage: string,
-): Promise<string> {
+): Promise<TranslateXhtmlResult> {
   const $ = cheerio.load(content, { xmlMode: true });
   const roots = $.root().children().toArray();
 
@@ -274,19 +329,36 @@ async function translateXhtmlDocument(
     })
     .filter((item) => item.core);
 
-  for (let i = 0; i < workItems.length; i += TRANSLATION_BATCH_SIZE) {
-    const batch = workItems.slice(i, i + TRANSLATION_BATCH_SIZE);
-    const translated = await translateEntriesSafely(
-      batch.map((item) => item.core),
-      sourceLanguage,
-      targetLanguage,
+  const totalChars = workItems.reduce((sum, item) => sum + item.core.length, 0);
+  if (totalChars > MAX_TRANSLATABLE_CHARS) {
+    throw new EpubValidationError(
+      "El EPUB contiene demasiado texto para traducción en línea. Divide el libro en partes más pequeñas.",
     );
+  }
 
+  const batches: Array<typeof workItems> = [];
+  for (let i = 0; i < workItems.length; i += TRANSLATION_BATCH_SIZE) {
+    batches.push(workItems.slice(i, i + TRANSLATION_BATCH_SIZE));
+  }
+
+  const translatedBatches = await mapWithConcurrency(
+    batches,
+    TRANSLATION_BATCH_CONCURRENCY,
+    (batch) =>
+      translateEntriesSafely(
+        batch.map((item) => item.core),
+        sourceLanguage,
+        targetLanguage,
+      ),
+  );
+
+  translatedBatches.forEach((translated, batchIndex) => {
+    const batch = batches[batchIndex];
     translated.forEach((translatedText, index) => {
       const item = batch[index];
       item.node.data = `${item.leading}${translatedText}${item.trailing}`;
     });
-  }
+  });
 
   const html = $("html");
   if (html.length) {
@@ -294,7 +366,12 @@ async function translateXhtmlDocument(
     html.attr("xml:lang", targetLanguage);
   }
 
-  return $.xml();
+  return {
+    translatedContent: $.xml(),
+    translatableNodeCount: workItems.length,
+    translatableChars: totalChars,
+    batchCount: batches.length,
+  };
 }
 
 async function translateOpfMetadata(
@@ -377,23 +454,86 @@ export async function translateEpubBuffer(
   buffer: Buffer,
   options: TranslateEpubOptions,
 ): Promise<Buffer> {
+  const startedAt = Date.now();
+  const log = (message: string, meta?: Record<string, unknown>) => {
+    if (options.onLog) {
+      options.onLog(message, meta);
+      return;
+    }
+
+    if (options.traceId) {
+      console.log(`[EPUB:${options.traceId}] ${message}`, meta ?? "");
+      return;
+    }
+
+    console.log(`[EPUB] ${message}`, meta ?? "");
+  };
+
   const zip = await JSZip.loadAsync(buffer);
   await validateEpubFile(zip);
 
   const { sourceLanguage, targetLanguage } = options;
   const structure = await parseEpubStructure(zip);
 
-  for (const spineDoc of structure.spineDocuments) {
-    if (spineDoc.isNav || isTocDocumentPath(spineDoc.zipPath)) continue;
+  const chapters = structure.spineDocuments.filter(
+    (doc) => !doc.isNav && !isTocDocumentPath(doc.zipPath),
+  );
+  log("Inicio de traduccion EPUB", {
+    sourceLanguage,
+    targetLanguage,
+    chapterCount: chapters.length,
+  });
+
+  await mapWithConcurrency(chapters, CHAPTER_TRANSLATION_CONCURRENCY, async (spineDoc, chapterIndex) => {
+    options.onChapterProgress?.({
+      chapter: chapterIndex + 1,
+      totalChapters: chapters.length,
+      phase: "start",
+      path: spineDoc.zipPath,
+    });
+
+    const chapterStartedAt = Date.now();
+    log("Traduciendo capitulo", {
+      chapter: chapterIndex + 1,
+      of: chapters.length,
+      path: spineDoc.zipPath,
+    });
 
     const original = await readZipFileAsText(zip, spineDoc.zipPath);
     const translated = await translateXhtmlDocument(original, sourceLanguage, targetLanguage);
-    zip.file(spineDoc.zipPath, translated);
-  }
+    zip.file(spineDoc.zipPath, translated.translatedContent);
+
+    log("Capitulo traducido", {
+      chapter: chapterIndex + 1,
+      of: chapters.length,
+      path: spineDoc.zipPath,
+      translatableNodeCount: translated.translatableNodeCount,
+      translatableChars: translated.translatableChars,
+      batchCount: translated.batchCount,
+      durationMs: Date.now() - chapterStartedAt,
+    });
+
+    options.onChapterProgress?.({
+      chapter: chapterIndex + 1,
+      totalChapters: chapters.length,
+      phase: "done",
+      path: spineDoc.zipPath,
+    });
+
+    return null;
+  });
 
   const opfContent = await readZipFileAsText(zip, structure.rootfilePath);
   const translatedOpf = await translateOpfMetadata(opfContent, sourceLanguage, targetLanguage);
   zip.file(structure.rootfilePath, translatedOpf);
 
-  return zip.generateAsync({ type: "nodebuffer" });
+  log("Metadatos OPF traducidos", { rootfilePath: structure.rootfilePath });
+
+  const output = await zip.generateAsync({ type: "nodebuffer" });
+  log("EPUB traducido correctamente", {
+    outputBytes: output.byteLength,
+    totalDurationMs: Date.now() - startedAt,
+  });
+
+  return output;
 }
