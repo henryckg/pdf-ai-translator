@@ -1,4 +1,4 @@
-import { generateObject, generateText, Output } from "ai";
+import { generateText, Output } from "ai";
 import * as cheerio from "cheerio";
 import { XMLParser } from "fast-xml-parser";
 import JSZip from "jszip";
