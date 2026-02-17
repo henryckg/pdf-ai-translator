@@ -1,4 +1,4 @@
-import { generateObject, generateText, Output } from "ai";
+import { generateText, Output } from "ai";
 import * as cheerio from "cheerio";
 import { XMLParser } from "fast-xml-parser";
 import JSZip from "jszip";
@@ -6,9 +6,9 @@ import path from "node:path";
 import { z } from "zod";
 
 const EPUB_MIME_TYPE = "application/epub+zip";
-const TRANSLATION_BATCH_SIZE = 120;
+const TRANSLATION_BATCH_SIZE = 60;
 const TRANSLATION_BATCH_CONCURRENCY = 4;
-const CHAPTER_TRANSLATION_CONCURRENCY = 2;
+const CHAPTER_TRANSLATION_CONCURRENCY = 10;
 const MAX_TRANSLATABLE_CHARS = 180_000;
 
 export class EpubValidationError extends Error {
@@ -45,6 +45,7 @@ interface TranslateEpubOptions {
     phase: "start" | "done";
     path: string;
   }) => void;
+  checkCanceled?: () => boolean;
 }
 
 interface TranslateXhtmlResult {
@@ -308,6 +309,7 @@ async function translateXhtmlDocument(
   content: string,
   sourceLanguage: string,
   targetLanguage: string,
+  checkCanceled?: () => boolean,
 ): Promise<TranslateXhtmlResult> {
   const $ = cheerio.load(content, { xmlMode: true });
   const roots = $.root().children().toArray();
@@ -344,12 +346,14 @@ async function translateXhtmlDocument(
   const translatedBatches = await mapWithConcurrency(
     batches,
     TRANSLATION_BATCH_CONCURRENCY,
-    (batch) =>
-      translateEntriesSafely(
+    async (batch) => {
+      if (checkCanceled?.()) return batch.map((i) => i.core);
+      return translateEntriesSafely(
         batch.map((item) => item.core),
         sourceLanguage,
         targetLanguage,
-      ),
+      );
+    },
   );
 
   translatedBatches.forEach((translated, batchIndex) => {
@@ -440,7 +444,10 @@ export async function extractEpubTextForDetection(buffer: Buffer): Promise<Extra
 
   const text = extractedParts.join("\n\n").trim();
   if (!text) {
-    throw new EpubValidationError("No se encontró texto visible en el EPUB");
+    if (chapterCount > 0) {
+      return { text: "", charCount: 0, chapterCount };
+    }
+    throw new EpubValidationError("No se encontró texto visible ni capítulos válidos en el EPUB");
   }
 
   return {
@@ -485,6 +492,8 @@ export async function translateEpubBuffer(
   });
 
   await mapWithConcurrency(chapters, CHAPTER_TRANSLATION_CONCURRENCY, async (spineDoc, chapterIndex) => {
+    if (options.checkCanceled?.()) return null;
+
     options.onChapterProgress?.({
       chapter: chapterIndex + 1,
       totalChapters: chapters.length,
@@ -500,7 +509,18 @@ export async function translateEpubBuffer(
     });
 
     const original = await readZipFileAsText(zip, spineDoc.zipPath);
-    const translated = await translateXhtmlDocument(original, sourceLanguage, targetLanguage);
+    
+    if (options.checkCanceled?.()) return null;
+
+    const translated = await translateXhtmlDocument(
+      original,
+      sourceLanguage,
+      targetLanguage,
+      options.checkCanceled
+    );
+
+    if (options.checkCanceled?.()) return null;
+
     zip.file(spineDoc.zipPath, translated.translatedContent);
 
     log("Capitulo traducido", {
