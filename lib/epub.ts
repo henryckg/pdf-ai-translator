@@ -75,7 +75,7 @@ async function translateTextBatch(
 ): Promise<string[]> {
   const payload = JSON.stringify(entries);
   const { output } = await generateText({
-    model: "openai/gpt-4o-mini",
+    model: process.env.AI_GATEWAY_MODEL || "openai/gpt-5-nano",
     output: Output.object({
       schema: z.object({
         translations: z.array(z.string()),
@@ -106,7 +106,7 @@ async function translateSingleText(
   targetLanguage: string,
 ): Promise<string> {
   const { text: translated } = await generateText({
-    model: "openai/gpt-4o-mini",
+    model: process.env.AI_GATEWAY_MODEL || "openai/gpt-5-nano",
     system: `You are a professional document translator. Translate from ${sourceLanguage} to ${targetLanguage}.
 
 Rules:

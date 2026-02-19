@@ -75,7 +75,7 @@ export async function POST(req: Request) {
     const sampleText = extractedText.substring(0, 1500);
 
     const { text: detectedLanguage } = await generateText({
-      model: "openai/gpt-4o-mini",
+      model: process.env.AI_GATEWAY_MODEL || "openai/gpt-5-nano",
       prompt: `Detect the language of the following text. Respond with ONLY the language name in Spanish (e.g., "Inglés", "Francés", "Alemán", "Portugués", "Italiano", "Chino", "Japonés", "Coreano", "Árabe", "Ruso", "Español"). Do not include any other text or explanation.\n\nText: "${sampleText}"`,
     });
 
