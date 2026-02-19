@@ -4,17 +4,35 @@ import {
   EpubValidationError,
   extractEpubTextForDetection,
 } from "@/lib/epub";
+import { isRateLimited } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
 export async function POST(req: Request) {
   try {
+    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    if (isRateLimited(ip, 10, 60000)) { // 10 requests per minute
+      return Response.json(
+        { error: "Has excedido el límite de peticiones. Por favor espera un momento." },
+        { status: 429 }
+      );
+    }
+
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
 
     if (!file) {
       return Response.json({ error: "No se proporcionó un archivo" }, { status: 400 });
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      return Response.json(
+        { error: "El archivo es demasiado grande. El tamaño máximo es 10MB." },
+        { status: 400 }
+      );
     }
 
     const isPdf = file.type === "application/pdf";
