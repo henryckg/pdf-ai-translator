@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     }
 
     const result = streamText({
-      model: process.env.AI_GATEWAY_MODEL || "openai/gpt-5-nano",
+      model: process.env.AI_GATEWAY_MODEL || "openai/gpt-oss-120b",
       system: `You are a professional document translator. Translate the given text from ${sourceLanguage} to ${targetLanguage}. 
       
 Rules:
