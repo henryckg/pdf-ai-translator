@@ -14,7 +14,7 @@ export default function Page() {
               <FileText className="h-5 w-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-foreground">AI Document Translator</h1>
+              <h1 className="text-lg font-bold text-foreground">AI PDF Translator</h1>
               <p className="text-xs text-muted-foreground">Traduce documentos con IA</p>
             </div>
           </div>
@@ -26,7 +26,7 @@ export default function Page() {
         {/* Hero */}
         <section className="mb-12 text-center">
           <h2 className="text-balance text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            Traduce tus PDF y EPUB al instante
+            Traduce tus PDF al instante
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-pretty text-muted-foreground leading-relaxed">
             Arrastra tu documento, selecciona el idioma de destino y descarga tu archivo traducido.

@@ -11,10 +11,10 @@ interface PdfDropZoneProps {
   file: File | null;
   onClear: () => void;
   disabled?: boolean;
-  acceptedFormats?: "pdf" | "pdf-epub";
+  acceptedFormats?: "pdf";
 }
 
-function isSupportedFile(file: File, acceptedFormats: "pdf" | "pdf-epub"): boolean {
+function isSupportedFile(file: File, acceptedFormats: "pdf"): boolean {
   const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
   const isEpub =
     file.type === "application/epub+zip" || file.name.toLowerCase().endsWith(".epub");
@@ -28,7 +28,7 @@ export function PdfDropZone({
   file,
   onClear,
   disabled,
-  acceptedFormats = "pdf-epub",
+  acceptedFormats = "pdf",
 }: PdfDropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
 
